@@ -1,0 +1,45 @@
+<script lang="ts">
+
+    type GetCounterResponse = { count: number };
+
+    async function getCounter(): Promise<GetCounterResponse> {
+        const response = await fetch("/api/counter");
+        return response.json();
+    }
+
+    async function postCounter(delta: number): Promise<GetCounterResponse> {
+        const response = await fetch("/api/counter", {
+            method: "POST",
+            body: JSON.stringify({delta: Math.floor(delta)}),
+            headers: {"Content-Type": "application/json"},
+        });
+        return response.json();
+    }
+
+    let counter: Promise<GetCounterResponse> = $state(getCounter())
+
+    function updateCounter(delta: number) {
+        return () => {
+            postCounter(delta).then(response => {
+                counter = Promise.resolve(response);
+            })
+        }
+    }
+
+</script>
+
+{#await counter}
+    Getting counter ...
+{:then counter}
+    <button onclick={updateCounter((-1))}>
+        -
+    </button>
+    <button>
+        count is {counter.count}
+    </button>
+    <button onclick={updateCounter(1)}>
+        +
+    </button>
+{:catch _}
+    Failed getting counter ...
+{/await}

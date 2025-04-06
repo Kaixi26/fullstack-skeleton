@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS counter
+(
+    id    INTEGER NOT NULL PRIMARY KEY,
+    count INTEGER NOT NULL
+);
