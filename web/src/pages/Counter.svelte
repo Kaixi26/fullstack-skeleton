@@ -1,5 +1,7 @@
 <script lang="ts">
 
+    import { Button } from "$shadcn/components/ui/button/index.js";
+
     type GetCounterResponse = { count: number };
 
     async function getCounter(): Promise<GetCounterResponse> {
@@ -31,9 +33,9 @@
 {#await counter}
     Getting counter ...
 {:then counter}
-    <button onclick={updateCounter((-1))}>
+    <Button onclick={updateCounter((-1))}>
         -
-    </button>
+    </Button>
     <button>
         count is {counter.count}
     </button>

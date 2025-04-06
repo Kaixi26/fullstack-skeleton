@@ -1,6 +1,10 @@
 {
+  "files": [],
   "extends": "@tsconfig/svelte/tsconfig.json",
   "compilerOptions": {
+    "lib": [
+      "dom"
+    ],
     "target": "ESNext",
     "useDefineForClassFields": true,
     "module": "ESNext",
@@ -14,11 +18,26 @@
     "allowJs": true,
     "checkJs": true,
     "isolatedModules": true,
-    "moduleDetection": "force"
+    "moduleDetection": "force",
+    "paths": {
+      "$shadcn": [
+        "./web/src/shadcn"
+      ],
+      "$shadcn/*": [
+        "./web/src/shadcn/*"
+      ],
+      "$components": [
+        "./web/src/components"
+      ],
+      "$pages/*": [
+        "./web/src/pages/*"
+      ]
+    }
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.js",
-    "src/**/*.svelte"
+    "web/src/**/*.ts",
+    "web/src/**/*.js",
+    "web/src/**/*.svelte"
   ]
 }
+

@@ -1,18 +1,16 @@
 import {defineConfig} from 'vite'
 import {svelte} from '@sveltejs/vite-plugin-svelte'
-import tailwindcss from '@tailwindcss/vite'
+import path from "path";
 
 // https://vite.dev/config/
 export default defineConfig({
     root: "web",
-    base: "/static/",
     build: {
         outDir: "../backend/src/main/resources/static",
         emptyOutDir: true,
     },
     plugins: [
         svelte(),
-        tailwindcss(),
     ],
     server: {
         port: 8080,
@@ -21,6 +19,11 @@ export default defineConfig({
                 target: "http://localhost:8081",
                 rewrite: (path) => path,
             },
+        },
+    },
+    resolve: {
+        alias: {
+            $shadcn: path.resolve("./web/src/shadcn"),
         },
     },
 })

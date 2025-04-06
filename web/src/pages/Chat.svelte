@@ -49,7 +49,7 @@
         {#await chat}
             Fetching chat ...
         {:then chat}
-            {#each chat.messages.toReversed() as message}
+            {#each chat.messages as message}
                 <span class="message">{message.user}: {message.message}</span>
             {/each}
         {:catch _}
