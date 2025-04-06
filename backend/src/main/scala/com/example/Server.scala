@@ -1,14 +1,17 @@
 package com.example
 
 import com.example.Server.*
+import com.example.api.ApiResult.*
 import com.example.api.model.*
 import com.example.api.{Api, ApiError, ApiResult}
-import com.example.api.ApiResult.*
 import zio.http.*
-import zio.http.ChannelEvent.UserEvent
-import zio.http.codec.SegmentCodec
+import zio.http.endpoint.openapi.OpenAPI.SecurityScheme.Http
 import zio.json.{DecoderOps, JsonCodec, JsonDecoder}
-import zio.{Cause, IO, ZIO, ZLayer, http}
+import zio.metrics.{Metric, MetricLabel}
+import zio.metrics.Metric.Counter
+import zio.metrics.MetricKeyType.Histogram
+import zio.metrics.connectors.prometheus.PrometheusPublisher
+import zio.{IO, ZIO, ZLayer, http}
 
 import java.util.UUID
 import scala.annotation.unused
@@ -16,6 +19,7 @@ import scala.annotation.unused
 class Server(
     config: ApplicationConfig,
     @unused client: http.Client,
+    prometheusPublisher: PrometheusPublisher,
     api: Api,
 ) {
 
@@ -63,45 +67,24 @@ class Server(
   private val appRoutes: Routes[Any, Nothing] =
     middleware(collectRequestMetrics(sandboxApiErrors(apiRoutes ++ frontend)))
 
-  private def middleware: Middleware[Any] =
-    Middleware.logAnnotate("request_id", UUID.randomUUID().toString) ++
-      Middleware.dropTrailingSlash ++
-      Middleware.requestLogging(logRequestBody = false, logResponseBody = false) ++
-      HandlerAspect.customAuthProvidingZIO(res => ZIO.some(0))
+  private val metricRoutes: Routes[Any, Nothing] = Routes(
+    Method.GET / "metrics" -> Handler.fromResponseZIO(prometheusPublisher.get.map(Response.text))
+  )
 
-  private def sandboxApiErrors[Env](routes: Routes[Env, ApiError]): Routes[Env, Nothing] =
-    routes
-      .tapErrorZIO(err => err.log)
-      .handleError(err => err.asResponse)
-
-  // TODO: proper prometheus setup
-  private def collectRequestMetrics[Env, Err](routes: Routes[Env, Err]): Routes[Env, Err] =
-    Routes(
-      routes.routes.map { route =>
-        val method = route.routePattern.method
-        val tag = route.routePattern.pathCodec.toString
-        route.transform { hndlr =>
-          for {
-            start <- Handler.fromZIO(zio.Clock.instant)
-            result <- hndlr
-            end <- Handler.fromZIO(zio.Clock.instant)
-            _ <- Handler.fromZIO(ZIO.debug(s"Metrics: $method $tag ${java.time.Duration.between(start, end)}"))
-          } yield result
-        }
-      }
-    )
-
-  val serve: IO[Throwable, Nothing] =
-    http.Server
+  val serve: IO[Throwable, Nothing] = for {
+    _ <- http.Server
+      .serve(metricRoutes)
+      .provide(http.Server.defaultWith(c => c.port(config.prometheus.port)))
+      .fork
+    never <- http.Server
       .serve[Any](appRoutes)
-      .provide(
-        http.Server.defaultWith(c => c.port(config.port).hybridRequestStreaming(1024 * 100))
-      )
+      .provide(http.Server.defaultWith(c => c.port(config.port).hybridRequestStreaming(1024 * 100)))
+  } yield never
 }
 
 object Server {
-  val layer: ZLayer[ApplicationConfig & Client & Api, Nothing, Server] =
-    ZLayer.fromFunction(new Server(_, _, _))
+  val layer: ZLayer[ApplicationConfig & Client & Api & PrometheusPublisher, Nothing, Server] =
+    ZLayer.fromFunction(new Server(_, _, _, _))
 
   def extractBody[Body: JsonCodec]: HandlerAspect[Any, Body] = HandlerAspect.interceptIncomingHandler {
     Handler.fromFunctionZIO[Request] { request =>
@@ -132,4 +115,46 @@ object Server {
       result <- fn(b)
     } yield result
 
+  private val requestCount: Counter[Long] = Metric.counter("requestCount")
+
+  val requestDuration: Metric.Histogram[Double] =
+    Metric.histogram(
+      "requestDuration",
+      // Up to ~1sec
+      Histogram.Boundaries.exponential(1.0d, 2.0d, 11)
+    )
+
+  private def collectRequestMetrics[Env, Err](routes: Routes[Env, Err]): Routes[Env, Err] =
+    Routes(
+      routes.routes.map { route =>
+        val method = route.routePattern.method
+        val path = route.routePattern.pathCodec.toString
+        val tags = Set(MetricLabel("path", path), MetricLabel("method", method.toString))
+        route.transform { hndlr =>
+          for {
+            start <- Handler.fromZIO(zio.Clock.instant)
+            result <- hndlr
+            _ <- Handler.fromZIO {
+              for {
+                end <- zio.Clock.instant
+                duration = java.time.Duration.between(start, end)
+                _ <- requestCount.tagged(tags).increment
+                _ <- requestDuration.tagged(tags).update(duration.toMillis.toDouble)
+              } yield ()
+            }
+          } yield result
+        }
+      }
+    )
+
+  private def middleware: Middleware[Any] =
+    Middleware.logAnnotate("request_id", UUID.randomUUID().toString) ++
+      Middleware.dropTrailingSlash ++
+      Middleware.requestLogging(logRequestBody = false, logResponseBody = false) ++
+      HandlerAspect.customAuthProvidingZIO(res => ZIO.some(0))
+
+  private def sandboxApiErrors[Env](routes: Routes[Env, ApiError]): Routes[Env, Nothing] =
+    routes
+      .tapErrorZIO(err => err.log)
+      .handleError(err => err.asResponse)
 }

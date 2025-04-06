@@ -18,6 +18,8 @@ lazy val backend = project
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % "2.1.17",
       "dev.zio" %% "zio-http" % "3.2.0",
+      "dev.zio" %% "zio-metrics-connectors" % "2.3.1",
+      "dev.zio" %% "zio-metrics-connectors-prometheus" % "2.3.1",
       "io.getquill" %% "quill-jdbc-zio" % "4.8.6",
       "org.xerial" % "sqlite-jdbc" % "3.49.1.0",
       "com.typesafe" % "config" % "1.4.3",

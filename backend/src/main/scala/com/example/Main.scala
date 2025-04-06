@@ -2,8 +2,9 @@ package com.example
 
 import com.example.api.Api
 import com.example.repo.{ChatRepo, CounterRepo, DataService, QuillSqlite}
-import zio.{Config, ConfigProvider, LogLevel, Scope, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, http, logging}
+import zio.{Config, ConfigProvider, LogLevel, Scope, ZIO, ZIOAppArgs, ZIOAppDefault, ZLayer, durationInt, http, logging}
 import zio.logging.*
+import zio.metrics.connectors.{MetricsConfig, prometheus}
 
 object Main extends ZIOAppDefault {
 
@@ -32,14 +33,25 @@ object Main extends ZIOAppDefault {
   override val bootstrap: ZLayer[ZIOAppArgs, Any, Any] =
     zio.Runtime.removeDefaultLoggers >>> developmentLogger
 
+  private val metricsConfig = ZLayer.succeed(MetricsConfig(5.seconds))
+
   override def run: ZIO[ZIOAppArgs & Scope, Any, Any] =
     program
       .provide(
         ApplicationConfig.layer,
+
+        // Metrics
+        metricsConfig,
+        prometheus.publisherLayer,
+        prometheus.prometheusLayer,
+
+        // DB
         QuillSqlite.layer,
         DataService.layer,
         CounterRepo.layer,
         ChatRepo.layer,
+
+        // Http
         http.Client.default,
         Api.layer,
         Server.layer,
