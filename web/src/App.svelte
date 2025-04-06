@@ -13,38 +13,25 @@
 </script>
 
 <Router {url}>
-
-    <!--
-    <h1 class="text-3xl font-bold underline">
-        Hello world!
-    </h1>
-
-    <div class="card">
-        <Counter/>
-    </div>
-
-    <div class="card">
-        <Chat/>
-    </div>
-    -->
-
     <Sidebar.Provider>
         <AppSidebar/>
         <Sidebar.Inset>
-            <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-                <Sidebar.Trigger class="-ml-1"/>
-            </header>
-            <main class="flex flex-1 flex-col gap-4 p-4">
-                <Route path="/">
-                    <PageChat/>
-                </Route>
+            <div class="flex flex-col max-h-screen">
+                <header class="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+                    <Sidebar.Trigger class="-ml-1"/>
+                </header>
+                <main class="flex flex-1 flex-col gap-4 p-4 flex-grow overflow-hidden">
+                    <Route path="/">
+                        <PageChat/>
+                    </Route>
 
-                <Route path="/counter">
-                    <PageCounter/>
-                </Route>
+                    <Route path="/counter">
+                        <PageCounter/>
+                    </Route>
 
-                <Route path="/*">Page not found.</Route>
-            </main>
+                    <Route path="/*">Page not found.</Route>
+                </main>
+            </div>
         </Sidebar.Inset>
     </Sidebar.Provider>
 </Router>

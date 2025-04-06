@@ -39,9 +39,9 @@
     <button>
         count is {counter.count}
     </button>
-    <button onclick={updateCounter(1)}>
+    <Button onclick={updateCounter(1)}>
         +
-    </button>
+    </Button>
 {:catch _}
     Failed getting counter ...
 {/await}
