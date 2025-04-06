@@ -6,6 +6,7 @@ import com.example.api.{Api, ApiError, ApiResult}
 import com.example.api.ApiResult.*
 import zio.http.*
 import zio.http.ChannelEvent.UserEvent
+import zio.http.codec.SegmentCodec
 import zio.json.{DecoderOps, JsonCodec, JsonDecoder}
 import zio.{Cause, IO, ZIO, ZLayer, http}
 
@@ -41,29 +42,26 @@ class Server(
   )
 
   private val frontend: Routes[Any, ApiError] = Routes(
-    Method.GET / "static" / trailing -> handler {
+    Method.GET / trailing -> handler {
       for {
         path <- Handler.param[(Path, Request)](_._1)
         file <- Handler.getResourceAsFile((http.Path("static") ++ path).encode)
         http <- Handler.param[(Path, Request)](_._2).andThen {
-          if (file.isFile) Handler.fromFile(file) else Handler.notFound
+          if (file.isFile) {
+            Handler.fromFile(file)
+          } else {
+            Handler.getResourceAsFile("static/index.html").flatMap(Handler.fromFile(_))
+          }
         }
       } yield http
-    },
-    Method.GET / trailing -> handler {
-      for {
-        path <- Handler.param[(Path, Request)](_._1)
-        file <- Handler.getResourceAsFile("static/index.html")
-        http <- Handler.fromFile(file)
-      } yield http
-    },
+    }
   )
     .mapError(err => ApiError.InternalServerError("An error occured while serving static pages", Some(err)))
 
   private val apiRoutes: Routes[Any, ApiError] = counterRoutes ++ chatRoutes ++ apiFallback
 
   private val appRoutes: Routes[Any, Nothing] =
-    middleware(sandboxApiErrors(apiRoutes ++ frontend))
+    middleware(collectRequestMetrics(sandboxApiErrors(apiRoutes ++ frontend)))
 
   private def middleware: Middleware[Any] =
     Middleware.logAnnotate("request_id", UUID.randomUUID().toString) ++
@@ -75,6 +73,23 @@ class Server(
     routes
       .tapErrorZIO(err => err.log)
       .handleError(err => err.asResponse)
+
+  // TODO: proper prometheus setup
+  private def collectRequestMetrics[Env, Err](routes: Routes[Env, Err]): Routes[Env, Err] =
+    Routes(
+      routes.routes.map { route =>
+        val method = route.routePattern.method
+        val tag = route.routePattern.pathCodec.toString
+        route.transform { hndlr =>
+          for {
+            start <- Handler.fromZIO(zio.Clock.instant)
+            result <- hndlr
+            end <- Handler.fromZIO(zio.Clock.instant)
+            _ <- Handler.fromZIO(ZIO.debug(s"Metrics: $method $tag ${java.time.Duration.between(start, end)}"))
+          } yield result
+        }
+      }
+    )
 
   val serve: IO[Throwable, Nothing] =
     http.Server
